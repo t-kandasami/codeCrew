@@ -17,6 +17,108 @@ def create_user(db: Session, user: schemas.UserCreate):
 def get_user_by_email(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
 
+# --- Class CRUD ---
+def create_class(db: Session, teacher_id: int, class_data: schemas.ClassCreate):
+    db_class = models.Class(
+        name=class_data.name,
+        description=class_data.description,
+        teacher_id=teacher_id
+    )
+    db.add(db_class)
+    db.commit()
+    db.refresh(db_class)
+    return db_class
+
+def update_class(db: Session, class_id: int, teacher_id: int, class_data: schemas.ClassUpdate):
+    db_class = db.query(models.Class).filter(
+        models.Class.id == class_id,
+        models.Class.teacher_id == teacher_id
+    ).first()
+    
+    if not db_class:
+        return None
+    
+    # Update only the fields that are provided
+    if class_data.name is not None:
+        db_class.name = class_data.name
+    if class_data.description is not None:
+        db_class.description = class_data.description
+    
+    db.commit()
+    db.refresh(db_class)
+    return db_class
+
+def get_teacher_classes(db: Session, teacher_id: int):
+    classes = db.query(models.Class).filter(models.Class.teacher_id == teacher_id).all()
+    # Add student count and sessions to each class
+    for class_obj in classes:
+        student_count = db.query(models.ClassEnrollment).filter(
+            models.ClassEnrollment.class_id == class_obj.id
+        ).count()
+        class_obj.student_count = student_count
+        
+        # Get sessions for this class
+        sessions = db.query(models.Session).filter(models.Session.class_id == class_obj.id).all()
+        class_obj.sessions = sessions
+    return classes
+
+def get_student_classes(db: Session, student_id: int):
+    enrollments = db.query(models.ClassEnrollment).filter(
+        models.ClassEnrollment.student_id == student_id
+    ).all()
+    class_ids = [enrollment.class_id for enrollment in enrollments]
+    classes = db.query(models.Class).filter(models.Class.id.in_(class_ids)).all()
+    
+    # Add sessions to each class
+    for class_obj in classes:
+        sessions = db.query(models.Session).filter(models.Session.class_id == class_obj.id).all()
+        class_obj.sessions = sessions
+    return classes
+
+def get_class_by_id(db: Session, class_id: int):
+    return db.query(models.Class).filter(models.Class.id == class_id).first()
+
+def enroll_student_in_class(db: Session, class_id: int, student_id: int):
+    # Check if already enrolled
+    existing_enrollment = db.query(models.ClassEnrollment).filter(
+        models.ClassEnrollment.class_id == class_id,
+        models.ClassEnrollment.student_id == student_id
+    ).first()
+    
+    if existing_enrollment:
+        return existing_enrollment
+    
+    db_enrollment = models.ClassEnrollment(
+        class_id=class_id,
+        student_id=student_id
+    )
+    db.add(db_enrollment)
+    db.commit()
+    db.refresh(db_enrollment)
+    return db_enrollment
+
+def remove_student_from_class(db: Session, class_id: int, student_id: int):
+    enrollment = db.query(models.ClassEnrollment).filter(
+        models.ClassEnrollment.class_id == class_id,
+        models.ClassEnrollment.student_id == student_id
+    ).first()
+    
+    if enrollment:
+        db.delete(enrollment)
+        db.commit()
+        return True
+    return False
+
+def get_class_students(db: Session, class_id: int):
+    enrollments = db.query(models.ClassEnrollment).filter(
+        models.ClassEnrollment.class_id == class_id
+    ).all()
+    student_ids = [enrollment.student_id for enrollment in enrollments]
+    return db.query(models.User).filter(models.User.id.in_(student_ids)).all()
+
+def get_all_students(db: Session):
+    return db.query(models.User).filter(models.User.role == "student").all()
+
 # --- Session CRUD ---
 def get_user_sessions(db: Session, user_id: int):
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -30,10 +132,44 @@ def create_session(db: Session, teacher_id: int, sc: schemas.SessionCreate):
     db_sess = models.Session(
         title=sc.title,
         teacher_id=teacher_id,
+        class_id=sc.class_id,
+        session_type=sc.session_type,
         start_time=datetime.utcnow()
     )
     db.add(db_sess); db.commit(); db.refresh(db_sess)
     return db_sess
+
+def update_session(db: Session, session_id: int, teacher_id: int, session_data: schemas.SessionUpdate):
+    db_session = db.query(models.Session).filter(
+        models.Session.id == session_id,
+        models.Session.teacher_id == teacher_id
+    ).first()
+    
+    if not db_session:
+        return None
+    
+    # Update only the fields that are provided
+    if session_data.title is not None:
+        db_session.title = session_data.title
+    if session_data.session_type is not None:
+        db_session.session_type = session_data.session_type
+    
+    db.commit()
+    db.refresh(db_session)
+    return db_session
+
+def delete_session(db: Session, session_id: int, teacher_id: int):
+    db_session = db.query(models.Session).filter(
+        models.Session.id == session_id,
+        models.Session.teacher_id == teacher_id
+    ).first()
+    
+    if not db_session:
+        return False
+    
+    db.delete(db_session)
+    db.commit()
+    return True
 
 def get_session(db: Session, session_id: int):
     return db.query(models.Session).filter(models.Session.id == session_id).first()
@@ -57,7 +193,9 @@ def create_quiz(db: Session, session_id: int, user_id: int, qc: schemas.QuizCrea
     q = models.Quiz(
         session_id=session_id,
         question_text=qc.question_text,
+        options=qc.options,
         correct_answer=qc.correct_answer,
+        explanation=qc.explanation,
         created_by=user_id
     )
     db.add(q); db.commit(); db.refresh(q)

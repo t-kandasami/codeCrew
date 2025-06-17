@@ -16,16 +16,44 @@ class User(Base):
     quiz_responses = relationship("QuizResponse", back_populates="student")
     sent_feedback  = relationship("Feedback", back_populates="from_user", foreign_keys='Feedback.from_user_id')
     received_feedback = relationship("Feedback", back_populates="to_user", foreign_keys='Feedback.to_user_id')
+    # Class relationships
+    created_classes = relationship("Class", back_populates="teacher")
+    enrollments = relationship("ClassEnrollment", back_populates="student")
+
+class Class(Base):
+    __tablename__ = "classes"
+    id          = Column(Integer, primary_key=True, index=True)
+    name        = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    teacher_id  = Column(Integer, ForeignKey("users.id"))
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    
+    teacher     = relationship("User", back_populates="created_classes")
+    enrollments = relationship("ClassEnrollment", back_populates="class_obj")
+    sessions    = relationship("Session", back_populates="class_obj")
+
+class ClassEnrollment(Base):
+    __tablename__ = "class_enrollments"
+    id        = Column(Integer, primary_key=True, index=True)
+    class_id  = Column(Integer, ForeignKey("classes.id"))
+    student_id= Column(Integer, ForeignKey("users.id"))
+    enrolled_at = Column(DateTime, default=datetime.utcnow)
+    
+    class_obj = relationship("Class", back_populates="enrollments")
+    student   = relationship("User", back_populates="enrollments")
 
 class Session(Base):
     __tablename__ = "sessions"
     id         = Column(Integer, primary_key=True, index=True)
     title      = Column(String, nullable=False)
     teacher_id = Column(Integer, ForeignKey("users.id"))
+    class_id   = Column(Integer, ForeignKey("classes.id"), nullable=True)  # Optional: sessions can be standalone or part of a class
+    session_type = Column(String, default="live", nullable=False)  # live, quiz, whiteboard
     start_time = Column(DateTime, default=datetime.utcnow)
     end_time   = Column(DateTime, nullable=True)
 
     teacher    = relationship("User", back_populates="sessions")
+    class_obj  = relationship("Class", back_populates="sessions")
     messages   = relationship("Message", back_populates="session")
     quizzes    = relationship("Quiz", back_populates="session")
     whiteboard = relationship("WhiteboardData", back_populates="session")
@@ -47,7 +75,9 @@ class Quiz(Base):
     id              = Column(Integer, primary_key=True, index=True)
     session_id      = Column(Integer, ForeignKey("sessions.id"))
     question_text   = Column(Text, nullable=False)
+    options         = Column(JSON, nullable=True)  # Store multiple choice options as JSON array
     correct_answer  = Column(String, nullable=False)
+    explanation     = Column(Text, nullable=True)  # Explanation for the correct answer
     created_by      = Column(Integer, ForeignKey("users.id"))
 
     session   = relationship("Session", back_populates="quizzes")
