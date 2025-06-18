@@ -61,10 +61,19 @@ openssl rand -hex 32
 ### 4. Start the Application
 
 ```bash
-# Start all services
+# 1. Remove all the previous running instances of docker containers
+docker-compose down -v --rmi all
+
+# 2. Build everything fresh
+docker-compose build --no-cache
+
+# 3. Start all services
 docker-compose up -d
 
-# View logs (optional)
+# 4. Check status
+docker-compose ps
+
+# 5. View logs
 docker-compose logs -f
 ```
 
@@ -87,6 +96,12 @@ The application uses the following environment variables (see `env.example` for 
 | `OPENAI_API_KEY` | OpenAI API key for AI features | No | - |
 | `VITE_API_URL` | Frontend API URL | No | http://localhost:8000 |
 | `DEBUG` | Debug mode | No | false |
+
+.env file to paste inside frontend, backend, and codeCrew folder
+
+### Table Plus Software to View The Tables
+table plus: to view database
+
 
 ### Ports
 
